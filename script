@@ -8,8 +8,8 @@
 
   // Configuration
   const CONFIG = {
-    groupId: "YOUR_GROUP_ID_HERE",
-    accessToken: "YOUR_ACCESS_TOKEN_HERE",
+    groupId: "",
+    accessToken: "",
     batchLimit: 100,
     throttleMs: 350,
     apiUrl: "https://api.groupme.com/v3"
