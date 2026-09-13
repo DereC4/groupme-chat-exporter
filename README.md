@@ -1,4 +1,6 @@
 # GroupMe Chat Exporter
+<img width="796" height="462" alt="image" src="https://github.com/user-attachments/assets/455f93a3-7f48-4bd8-bbbc-53e283f5bcaa" />
+
 
 A simple script to download your entire GroupMe chat history into a JSON file. It runs directly in your browser's developer console.
 
