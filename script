@@ -1,0 +1,76 @@
+(async function exportGroupMeChat() {
+  const GROUP_ID = "";
+  const ACCESS_TOKEN = "";
+
+  let allMessages = [];
+  let beforeId = "";
+  let page = 1;
+
+  console.log("%cStarting GroupMe chat export...", "color: #00aff0; font-weight: bold;");
+
+  function downloadJSON(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log(`%cSaved ${data.length} messages to ${filename}`, "color: #28a745; font-weight: bold;");
+  }
+
+  while (true) {
+    let url = `https://api.groupme.com/v3/groups/${GROUP_ID}/messages?limit=100`;
+    if (beforeId) {
+      url += `&before_id=${beforeId}`;
+    }
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "X-Access-Token": ACCESS_TOKEN,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (response.status === 304) {
+        console.log("Reached the very beginning of the chat.");
+        break;
+      }
+
+      if (!response.ok) {
+        console.error(`Fetch error: HTTP ${response.status} - ${response.statusText}`);
+        break;
+      }
+
+      const json = await response.json();
+      const messages = json.response?.messages || [];
+
+      if (messages.length === 0) {
+        console.log("No further messages returned.");
+        break;
+      }
+
+      allMessages.push(...messages);
+      beforeId = messages[messages.length - 1].id;
+      console.log(`Batch ${page}: Pulled ${messages.length} messages (Total collected: ${allMessages.length})`);
+      page++;
+
+      // Small throttle to stay safely within rate limits
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    } catch (err) {
+      console.error("Network or script error:", err);
+      break;
+    }
+  }
+
+  if (allMessages.length > 0) {
+    // Reverse so the JSON array starts chronologically from oldest to newest
+    allMessages.reverse();
+    downloadJSON(allMessages, `groupme_${GROUP_ID}_export.json`);
+  } else {
+    console.warn("No messages were collected. Please check your GROUP_ID and ACCESS_TOKEN.");
+  }
+})();
