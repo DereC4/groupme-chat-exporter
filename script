@@ -1,76 +1,126 @@
-(async function exportGroupMeChat() {
-  const GROUP_ID = "";
-  const ACCESS_TOKEN = "";
+/**
+ * GroupMe Chat Exporter
+ * Run this snippet in your browser's Developer Tools Console.
+ * Ensure you are logged into GroupMe on the web.
+ */
+(async function () {
+  "use strict";
 
-  let allMessages = [];
-  let beforeId = "";
-  let page = 1;
+  // Configuration
+  const CONFIG = {
+    groupId: "YOUR_GROUP_ID_HERE",
+    accessToken: "YOUR_ACCESS_TOKEN_HERE",
+    batchLimit: 100,
+    throttleMs: 350,
+    apiUrl: "https://api.groupme.com/v3"
+  };
 
-  console.log("%cStarting GroupMe chat export...", "color: #00aff0; font-weight: bold;");
+  /**
+   * Pauses execution for a given number of milliseconds.
+   * @param {number} ms - Milliseconds to sleep.
+   * @returns {Promise<void>}
+   */
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  function downloadJSON(data, filename) {
+  /**
+   * Triggers a browser download of a JSON object.
+   * @param {Array<Object>} data - The array of message objects.
+   * @param {string} filename - The desired output filename.
+   */
+  const triggerDownload = (data, filename) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const anchor = document.createElement("a");
+    
+    anchor.href = url;
+    anchor.download = filename;
+    
+    document.body.appendChild(anchor);
+    anchor.click();
+    
+    document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-    console.log(`%cSaved ${data.length} messages to ${filename}`, "color: #28a745; font-weight: bold;");
-  }
+  };
 
-  while (true) {
-    let url = `https://api.groupme.com/v3/groups/${GROUP_ID}/messages?limit=100`;
+  /**
+   * Fetches a single batch of messages from the GroupMe API.
+   * @param {string} beforeId - The ID of the oldest message currently fetched.
+   * @returns {Promise<Array<Object>|null>} Array of messages, or null if the beginning is reached.
+   */
+  const fetchMessageBatch = async (beforeId) => {
+    const url = new URL(`${CONFIG.apiUrl}/groups/${CONFIG.groupId}/messages`);
+    url.searchParams.append("limit", CONFIG.batchLimit.toString());
+    
     if (beforeId) {
-      url += `&before_id=${beforeId}`;
+      url.searchParams.append("before_id", beforeId);
     }
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "X-Access-Token": CONFIG.accessToken,
+        "Content-Type": "application/json"
+      }
+    });
+
+    if (response.status === 304) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`API returned HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    return json.response?.messages || [];
+  };
+
+  // Main Execution
+  const exportChat = async () => {
+    if (CONFIG.groupId.includes("YOUR_") || CONFIG.accessToken.includes("YOUR_")) {
+      console.error("Error: Please update CONFIG.groupId and CONFIG.accessToken before running.");
+      return;
+    }
+
+    console.log("%cStarting GroupMe chat export...", "color: #00aff0; font-weight: bold; font-size: 14px;");
+
+    const allMessages = [];
+    let beforeId = "";
+    let page = 1;
 
     try {
-      const response = await fetch(url, {
-        headers: {
-          "X-Access-Token": ACCESS_TOKEN,
-          "Content-Type": "application/json"
+      while (true) {
+        const messages = await fetchMessageBatch(beforeId);
+
+        if (messages === null || messages.length === 0) {
+          console.log("%cReached the very beginning of the chat history.", "color: #28a745; font-weight: bold;");
+          break;
         }
-      });
 
-      if (response.status === 304) {
-        console.log("Reached the very beginning of the chat.");
-        break;
+        allMessages.push(...messages);
+        beforeId = messages[messages.length - 1].id;
+        
+        console.log(`Batch ${page}: Fetched ${messages.length} messages (Total collected: ${allMessages.length})`);
+        page++;
+
+        await sleep(CONFIG.throttleMs);
       }
 
-      if (!response.ok) {
-        console.error(`Fetch error: HTTP ${response.status} - ${response.statusText}`);
-        break;
+      if (allMessages.length > 0) {
+        allMessages.reverse();
+        
+        const filename = `groupme_${CONFIG.groupId}_export.json`;
+        triggerDownload(allMessages, filename);
+        
+        console.log(`%cSuccessfully saved ${allMessages.length} messages to ${filename}`, "color: #28a745; font-weight: bold; font-size: 14px;");
+      } else {
+        console.warn("No messages were found for this group.");
       }
 
-      const json = await response.json();
-      const messages = json.response?.messages || [];
-
-      if (messages.length === 0) {
-        console.log("No further messages returned.");
-        break;
-      }
-
-      allMessages.push(...messages);
-      beforeId = messages[messages.length - 1].id;
-      console.log(`Batch ${page}: Pulled ${messages.length} messages (Total collected: ${allMessages.length})`);
-      page++;
-
-      // Small throttle to stay safely within rate limits
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    } catch (err) {
-      console.error("Network or script error:", err);
-      break;
+    } catch (error) {
+      console.error("An error occurred during export:", error.message);
     }
-  }
+  };
 
-  if (allMessages.length > 0) {
-    // Reverse so the JSON array starts chronologically from oldest to newest
-    allMessages.reverse();
-    downloadJSON(allMessages, `groupme_${GROUP_ID}_export.json`);
-  } else {
-    console.warn("No messages were collected. Please check your GROUP_ID and ACCESS_TOKEN.");
-  }
+  await exportChat();
 })();
